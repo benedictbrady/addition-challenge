@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "addition-challenge"
+version = "0.1.0"
+description = "Train the smallest autoregressive transformer to do 10-digit integer addition"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0.0",
+    "numpy>=1.24.0",
+]
+
+[project.scripts]
+addition = "addition_challenge.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["addition_challenge"]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
