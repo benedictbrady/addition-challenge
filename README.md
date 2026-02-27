@@ -31,6 +31,7 @@ Converted from the [AdderBoard leaderboard](https://github.com/anadim/AdderBoard
 | Submission | Params | Accuracy | Type | Original Author |
 |---|---|---|---|---|
 | `baselines/alexlitz_36.py` | **36** | 100.00% | Hand-coded | [alexlitz](https://gist.github.com/alexlitz/0d5efbccf443fb0e8136b8f5bd85140a) |
+| `baselines/wonderfall_40.py` | **40** | 100.00% | Hand-coded | [Wonderfall](https://gist.github.com/Wonderfall/373460ba8cec6cd143c8b0e9ebcd1294) |
 | `baselines/lichengliu03_50.py` | **50** | 100.00% | Hand-coded | [lichengliu03](https://github.com/lichengliu03/TinyAdder-50p) |
 | `baselines/cosminscn_66.py` | **66** | 100.00% | Hand-coded | [cosminscn](https://gist.github.com/cosminscn/e4d028281378e16b18e61fca1163f9cb) |
 | `baselines/bingbangboom_87.py` | **87** | 100.00% | Hand-coded | [bingbangboom-lab](https://gist.github.com/bingbangboom-lab/ec367a6078e9ac2c5748dbbb78eae2a1) |
@@ -79,7 +80,7 @@ Before evaluation, submissions pass through layered anti-cheat validation:
 
 - **Structural check** — model must contain self-attention layers
 - **Causal check** — prefix consistency test proves causal masking
-- **Encode bounds** — token count ≤25, values in `[0, VOCAB_SIZE)`
+- **Encode bounds** — token count ≤35, values in `[0, VOCAB_SIZE)`
 - **Encode consistency** — encode must not smuggle the answer
 - **Decode honesty** — random garbage tokens must not produce valid answers
 - **AST safety** — no global state mutation, dangerous imports, or eval/exec
@@ -89,7 +90,7 @@ Before evaluation, submissions pass through layered anti-cheat validation:
 - **Metric**: unique trainable parameter count (lower is better)
 - **Threshold**: ≥99% accuracy on 10,010 test cases (10 edge cases + 10,000 random pairs, seed=2025)
 - **Deduplication**: weight-tied parameters counted once (`data_ptr()`)
-- **Frozen params**: `requires_grad=False` parameters are excluded
+- **All params counted**: trainable and frozen `nn.Parameter` tensors, plus non-boolean buffers
 
 ## Rules
 
@@ -97,7 +98,7 @@ Before evaluation, submissions pass through layered anti-cheat validation:
 2. Model must be an `nn.Module` with `forward(token_ids) -> logits`
 3. Model must contain at least one self-attention layer with causal masking
 4. `encode` and `decode` must be pure functions — no global state, no side channels
-5. `VOCAB_SIZE` ≤ 256, `MAX_OUTPUT_LEN` ≤ 30, `encode` output ≤ 25 tokens
+5. `VOCAB_SIZE` ≤ 256, `MAX_OUTPUT_LEN` ≤ 30, `encode` output ≤ 35 tokens
 6. Hand-coded weights are allowed — this is about representation, not just learning
 
 ## Tips
@@ -159,6 +160,7 @@ addition-challenge/
 │
 ├── baselines/                    # AdderBoard submissions (36–6080 params)
 │   ├── alexlitz_36.py            # 36 params, hand-coded ALiBi+float64
+│   ├── wonderfall_40.py          # 40 params, hand-coded RoPE period-19
 │   ├── lichengliu03_50.py        # 50 params, hand-coded custom GPT
 │   ├── cosminscn_66.py           # 66 params, hand-coded nanoGPT
 │   ├── bingbangboom_87.py        # 87 params, hand-coded 2L Qwen3

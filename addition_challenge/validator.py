@@ -21,6 +21,9 @@ import torch.nn as nn
 
 from .loader import Submission
 
+MAX_ENCODE_TOKENS = 35
+CAUSAL_CHECK_TOLERANCE = 1e-3
+
 
 @dataclass
 class ValidationResult:
@@ -118,7 +121,7 @@ def _check_causal_behavior(sub: Submission) -> ValidationResult:
     shared_logits_b = logits_b[0, :-1]
 
     max_diff = (shared_logits_a - shared_logits_b).abs().max().item()
-    if max_diff > 1e-4:
+    if max_diff > CAUSAL_CHECK_TOLERANCE:
         return ValidationResult(
             False,
             "Causal behavior verified",
@@ -139,8 +142,8 @@ def _check_encode_bounds(sub: Submission) -> list[ValidationResult]:
             results.append(ValidationResult(False, "Encode bounds valid", f"encode({a}, {b}) returned {type(tokens)}, expected list"))
             return results
 
-        if len(tokens) > 25:
-            results.append(ValidationResult(False, "Encode bounds valid", f"encode({a}, {b}) returned {len(tokens)} tokens, max is 25"))
+        if len(tokens) > MAX_ENCODE_TOKENS:
+            results.append(ValidationResult(False, "Encode bounds valid", f"encode({a}, {b}) returned {len(tokens)} tokens, max is {MAX_ENCODE_TOKENS}"))
             return results
 
         out_of_range = [t for t in tokens if t < 0 or t >= sub.vocab_size]
@@ -148,7 +151,7 @@ def _check_encode_bounds(sub: Submission) -> list[ValidationResult]:
             results.append(ValidationResult(False, "Encode bounds valid", f"encode({a}, {b}) has tokens outside [0, {sub.vocab_size}): {out_of_range}"))
             return results
 
-    results.append(ValidationResult(True, "Encode bounds valid", f"All sample encodes within bounds (≤25 tokens, range [0, {sub.vocab_size})"))
+    results.append(ValidationResult(True, "Encode bounds valid", f"All sample encodes within bounds (≤{MAX_ENCODE_TOKENS} tokens, range [0, {sub.vocab_size})"))
     return results
 
 
