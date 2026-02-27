@@ -30,6 +30,13 @@ Converted from the [AdderBoard leaderboard](https://github.com/anadim/AdderBoard
 
 | Submission | Params | Accuracy | Type | Original Author |
 |---|---|---|---|---|
+| `baselines/alexlitz_36.py` | **36** | 100.00% | Hand-coded | [alexlitz](https://gist.github.com/alexlitz/0d5efbccf443fb0e8136b8f5bd85140a) |
+| `baselines/lichengliu03_50.py` | **50** | 100.00% | Hand-coded | [lichengliu03](https://github.com/lichengliu03/TinyAdder-50p) |
+| `baselines/cosminscn_66.py` | **66** | 100.00% | Hand-coded | [cosminscn](https://gist.github.com/cosminscn/e4d028281378e16b18e61fca1163f9cb) |
+| `baselines/bingbangboom_87.py` | **87** | 100.00% | Hand-coded | [bingbangboom-lab](https://gist.github.com/bingbangboom-lab/ec367a6078e9ac2c5748dbbb78eae2a1) |
+| `baselines/jacobli99_93.py` | **92** | 100.00% | Hand-coded | [jacobli99](https://gist.github.com/SeuperHakkerJa/9d615964d2284a9a699b5a24cf19e69d) |
+| `baselines/corbensorenson_111.py` | **111** | 100.00% | Hand-coded | [corbensorenson](https://github.com/corbensorenson/adderboard-submissions) |
+| `baselines/nino_116.py` | **116** | 100.00% | Hand-coded | [nino](https://gist.github.com/prasannakotyal/467d4c54564beba34d9d7edbd41c33dc) |
 | `baselines/wonderfall_121.py` | **121** | 100.00% | Hand-coded | [Wonderfall](https://gist.github.com/Wonderfall/7d6f49aa6703352f94d3d80b4cd31e15) |
 | `baselines/cosminscn_130.py` | **130** | 100.00% | Hand-coded | [cosminscn](https://gist.github.com/cosminscn/89c110dbae76ea0c873d67607e466f5b) |
 | `baselines/rezabyt_311.py` | **311** | 100.00% | Trained | [rezabyt](https://github.com/rezabyt/digit-addition-311p) |
@@ -38,7 +45,7 @@ Converted from the [AdderBoard leaderboard](https://github.com/anadim/AdderBoard
 | `baselines/anadim_6080.py` | **6,080** | 100.00% | Trained | [anadim](https://github.com/anadim/smallest-addition-transformer-claude-code) |
 | `starter/submission.py` | **69,184** | 100.00% | Trained | (starter) |
 
-The frontier is **121 parameters**. Can you do better?
+The frontier is **36 parameters**. Can you do better?
 
 ## What You Submit
 
@@ -150,7 +157,14 @@ addition-challenge/
 │   ├── train.py                  # Training script
 │   └── checkpoint.pt             # Pre-trained weights
 │
-├── baselines/                    # AdderBoard submissions (121–6080 params)
+├── baselines/                    # AdderBoard submissions (36–6080 params)
+│   ├── alexlitz_36.py            # 36 params, hand-coded ALiBi+float64
+│   ├── lichengliu03_50.py        # 50 params, hand-coded custom GPT
+│   ├── cosminscn_66.py           # 66 params, hand-coded nanoGPT
+│   ├── bingbangboom_87.py        # 87 params, hand-coded 2L Qwen3
+│   ├── jacobli99_93.py           # 92 params, hand-coded MQA decoder
+│   ├── corbensorenson_111.py     # 111 params, hand-coded Qwen3
+│   ├── nino_116.py               # 116 params, hand-coded shared-norm Qwen3
 │   ├── wonderfall_121.py         # 121 params, hand-coded Qwen3+RoPE
 │   ├── cosminscn_130.py          # 130 params, hand-coded rank-1 GPT
 │   ├── rezabyt_311.py            # 311 params, trained low-rank
