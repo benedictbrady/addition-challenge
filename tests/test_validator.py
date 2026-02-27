@@ -147,6 +147,28 @@ def test_encode_bounds_pass():
     assert all(r.passed for r in results)
 
 
+def test_encode_bounds_pass_at_35_tokens():
+    """Encode producing exactly 35 tokens should pass."""
+    def encode_35(a, b):
+        return [0] * 35
+
+    model = SimpleAttentionModel(vocab_size=14, max_seq_len=70)
+    sub = _make_submission(model, encode_fn=encode_35)
+    results = _check_encode_bounds(sub)
+    assert all(r.passed for r in results)
+
+
+def test_encode_bounds_fail_at_36_tokens():
+    """Encode producing 36 tokens should fail."""
+    def encode_36(a, b):
+        return [0] * 36
+
+    model = SimpleAttentionModel(vocab_size=14, max_seq_len=70)
+    sub = _make_submission(model, encode_fn=encode_36)
+    results = _check_encode_bounds(sub)
+    assert any(not r.passed for r in results)
+
+
 def test_encode_bounds_fail_range():
     def bad_encode(a, b):
         return [999, 0, 1]  # 999 is out of range for vocab_size=14
