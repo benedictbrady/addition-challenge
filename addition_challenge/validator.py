@@ -3,11 +3,14 @@
 Layered defense:
 1. Interface check — all exports present, types correct, bounds valid
 2. Structural attention check — model contains self-attention layers
+   AND they are actually invoked during forward (not decorative)
 3. Behavioral causal check — prefix consistency proves causal masking
 4. Encode bounds check — output length and token range
 5. Encode consistency check — catches carry-steganography
 6. Decode honesty test — catches side-channel cheating
 7. AST analysis — catches global state mutation in encode/decode
+8. Parameter influence check — registered params must affect output
+   (catches models that compute entirely from hardcoded constants)
 """
 
 import ast
@@ -43,6 +46,7 @@ def validate_submission(submission: Submission, verbose: bool = True) -> list[Va
     results.append(_check_encode_consistency(submission))
     results.append(_check_decode_honesty(submission))
     results.extend(_check_ast_safety(submission))
+    results.append(_check_parameter_influence(submission))
 
     return results
 
@@ -60,15 +64,14 @@ def _check_interface(sub: Submission) -> ValidationResult:
     return ValidationResult(True, "Interface bounds", f"VOCAB_SIZE={sub.vocab_size}, MAX_OUTPUT_LEN={sub.max_output_len}")
 
 
-def _check_structural_attention(sub: Submission) -> ValidationResult:
-    """Walk model.named_modules() looking for self-attention layers."""
-    model = sub.model
+def _find_attention_modules(model: nn.Module) -> list[tuple[str, nn.Module]]:
+    """Find all modules that look like self-attention layers."""
+    found = []
     for name, module in model.named_modules():
-        # Check for nn.MultiheadAttention
         if isinstance(module, nn.MultiheadAttention):
-            return ValidationResult(True, "Self-attention layer found", f"nn.MultiheadAttention at '{name}'")
+            found.append((name, module))
+            continue
 
-        # Check for modules with q/k/v projections
         child_names = {n for n, _ in module.named_children()}
         param_names = {n for n, _ in module.named_parameters(recurse=False)}
         all_names = child_names | param_names
@@ -82,14 +85,59 @@ def _check_structural_attention(sub: Submission) -> ValidationResult:
             or ("in_proj_weight" in all_names)  # packed QKV
         )
         if has_qkv:
-            return ValidationResult(True, "Self-attention layer found", f"QKV projections at '{name}'")
+            found.append((name, module))
+            continue
 
-        # Check class name
         class_name = type(module).__name__.lower()
         if "attention" in class_name and name != "":
-            return ValidationResult(True, "Self-attention layer found", f"Attention module '{type(module).__name__}' at '{name}'")
+            found.append((name, module))
 
-    return ValidationResult(False, "Self-attention layer found", "No self-attention layer detected in model")
+    return found
+
+
+def _check_structural_attention(sub: Submission) -> ValidationResult:
+    """Verify model contains self-attention that is actually invoked during forward.
+
+    Two-part check:
+    1. Model has modules that look like self-attention (QKV projections, etc.)
+    2. At least one such module is actually called during a forward pass
+       (catches decorative/dummy attention modules with nn.Identity projections)
+    """
+    model = sub.model
+    model.eval()
+
+    attention_modules = _find_attention_modules(model)
+    if not attention_modules:
+        return ValidationResult(False, "Self-attention layer found", "No self-attention layer detected in model")
+
+    # Verify at least one attention module is actually called during forward
+    called: set[str] = set()
+    hooks = []
+    for name, module in attention_modules:
+        def _make_hook(n: str):
+            def hook(mod, inp, out):
+                called.add(n)
+            return hook
+        hooks.append(module.register_forward_hook(_make_hook(name)))
+
+    try:
+        test_input = sub.encode(12345, 67890)
+        with torch.no_grad():
+            model(torch.tensor([test_input], dtype=torch.long))
+    finally:
+        for h in hooks:
+            h.remove()
+
+    if not called:
+        names = [n for n, _ in attention_modules]
+        return ValidationResult(
+            False,
+            "Self-attention layer found",
+            f"Attention modules found ({names}) but none invoked during forward — modules may be decorative",
+        )
+
+    called_name = next(iter(called))
+    return ValidationResult(True, "Self-attention layer found", f"Attention module at '{called_name}' invoked during forward")
 
 
 def _check_causal_behavior(sub: Submission) -> ValidationResult:
@@ -295,3 +343,63 @@ def _check_ast_safety(sub: Submission) -> list[ValidationResult]:
             results.append(ValidationResult(True, f"AST safety ({func_name})", "No dangerous patterns found"))
 
     return results
+
+
+def _check_parameter_influence(sub: Submission) -> ValidationResult:
+    """Verify that registered parameters actually affect the model's output.
+
+    Catches models that store all computation logic in hardcoded constants
+    (created inside forward()) and register only decorative/unused parameters
+    to satisfy the param counter.
+
+    Approach: perturb all parameters simultaneously with noise and check
+    whether the output changes. If output is identical, the parameters
+    are decorative and the model computes entirely from hidden constants.
+    """
+    model = sub.model
+    model.eval()
+
+    params = list(model.named_parameters())
+    if not params:
+        return ValidationResult(True, "Parameter influence", "Model has no parameters (nothing to check)")
+
+    test_input = sub.encode(12345, 67890)
+    input_tensor = torch.tensor([test_input], dtype=torch.long)
+
+    # Get baseline output
+    with torch.no_grad():
+        baseline_logits = model(input_tensor).clone()
+
+    # Save original parameter values
+    original_state = {name: p.data.clone() for name, p in params}
+
+    # Perturb ALL parameters with significant noise
+    with torch.no_grad():
+        for _, p in params:
+            noise = torch.randn_like(p.float()).to(p.dtype) * 0.5
+            p.data.add_(noise)
+
+    # Get perturbed output
+    with torch.no_grad():
+        perturbed_logits = model(input_tensor)
+
+    # Restore original parameters
+    with torch.no_grad():
+        for name, p in params:
+            p.data.copy_(original_state[name])
+
+    # Check if output changed
+    max_diff = (baseline_logits.float() - perturbed_logits.float()).abs().max().item()
+    if max_diff < 1e-6:
+        return ValidationResult(
+            False,
+            "Parameter influence",
+            "Model output is independent of all registered parameters — "
+            "parameters are decorative and real weights may be hardcoded constants",
+        )
+
+    return ValidationResult(
+        True,
+        "Parameter influence",
+        f"Parameters influence output (max logit change: {max_diff:.2e})",
+    )

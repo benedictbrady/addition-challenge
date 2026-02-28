@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 
-from addition_challenge.param_counter import count_unique_parameters
+from addition_challenge.param_counter import count_forward_constants, count_unique_parameters
 
 
 class SimpleModel(nn.Module):
@@ -128,3 +128,59 @@ def test_mixed_buffers():
 def test_empty_model():
     model = nn.Module()
     assert count_unique_parameters(model) == 0
+
+
+# -- Forward constant counting tests ------------------------------------------
+
+
+class HonestForwardModel(nn.Module):
+    """Model that uses only registered parameters in forward."""
+
+    def __init__(self):
+        super().__init__()
+        self.emb = nn.Embedding(14, 8)
+        self.head = nn.Linear(8, 14)
+
+    def forward(self, x):
+        return self.head(self.emb(x))
+
+
+class ConstantForwardModel(nn.Module):
+    """Model that creates constant tensors inside forward (the cheat pattern)."""
+
+    def __init__(self):
+        super().__init__()
+        self.dummy = nn.Parameter(torch.tensor(0.0))
+
+    def forward(self, x):
+        B, T = x.shape
+        # Hardcoded embedding table via torch.tensor — this is the cheat
+        weights = torch.tensor([
+            [float(i) * 10.0 for _ in range(8)]
+            for i in range(14)
+        ])
+        # Hardcoded output projection via torch.arange
+        scale = torch.arange(1, 15, dtype=torch.float32)
+        h = weights[x]  # (B, T, 8)
+        logits = h.sum(dim=-1, keepdim=True) * scale.unsqueeze(0).unsqueeze(0)
+        return logits
+
+
+def test_forward_constants_honest():
+    """Honest model should create few forward constants."""
+    model = HonestForwardModel()
+    sample = torch.tensor([[0, 1, 2, 3]], dtype=torch.long)
+    stats = count_forward_constants(model, sample)
+    # Honest model doesn't use torch.tensor/arange in forward
+    assert stats.total_elements == 0
+
+
+def test_forward_constants_cheat():
+    """Model with hardcoded constants in forward should have high count."""
+    model = ConstantForwardModel()
+    sample = torch.tensor([[0, 1, 2, 3]], dtype=torch.long)
+    stats = count_forward_constants(model, sample)
+    # torch.tensor creates 14*8=112 elements, torch.arange creates 14
+    assert stats.total_elements >= 100
+    assert "tensor" in stats.call_counts
+    assert "arange" in stats.call_counts

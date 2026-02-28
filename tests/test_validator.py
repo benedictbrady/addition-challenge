@@ -10,6 +10,7 @@ from addition_challenge.validator import (
     _check_encode_bounds,
     _check_encode_consistency,
     _check_interface,
+    _check_parameter_influence,
     _check_structural_attention,
 )
 
@@ -66,6 +67,56 @@ class NonCausalModel(nn.Module):
         return self.head(h)
 
 
+class DummyAttentionModel(nn.Module):
+    """Model with a decorative attention module that is never called in forward.
+
+    This mimics the cheat pattern: register nn.Identity as q/k/v projections
+    to pass structural checks, but compute everything from hardcoded constants.
+    """
+
+    def __init__(self, vocab_size: int = 14):
+        super().__init__()
+        self.self_attn = _DummySelfAttention()
+        self.single_param = nn.Parameter(torch.tensor(0.0))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T = x.shape
+        # Compute from hardcoded constants, ignoring self.self_attn entirely
+        logits = torch.zeros(B, T, 14)
+        return logits
+
+
+class _DummySelfAttention(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.q_proj = nn.Identity()
+        self.k_proj = nn.Identity()
+        self.v_proj = nn.Identity()
+
+    def forward(self, x):
+        return x
+
+
+class ConstantModel(nn.Module):
+    """Model that has a real attention module (called in forward) but its
+    parameters are decorative — output is independent of them.
+
+    This catches the parameter-influence exploit: the model registers an
+    unused nn.Parameter to have a nonzero param count but computes entirely
+    from local constants.
+    """
+
+    def __init__(self, vocab_size: int = 14, d_model: int = 16, max_seq_len: int = 30):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(d_model, num_heads=2, batch_first=True)
+        self.unused_param = nn.Parameter(torch.tensor(0.0))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T = x.shape
+        # Ignore all parameters, return hardcoded output
+        return torch.zeros(B, T, 14)
+
+
 def _make_submission(model, encode_fn=None, decode_fn=None, vocab_size=14, max_output_len=12):
     if encode_fn is None:
         def encode_fn(a, b):
@@ -91,6 +142,8 @@ def _make_submission(model, encode_fn=None, decode_fn=None, vocab_size=14, max_o
     )
 
 
+# -- Structural attention tests -----------------------------------------------
+
 def test_structural_attention_pass():
     model = SimpleAttentionModel()
     sub = _make_submission(model)
@@ -105,6 +158,16 @@ def test_structural_attention_fail_mlp():
     assert not result.passed
 
 
+def test_structural_attention_fail_dummy():
+    """Attention module with Identity projections that is never called should fail."""
+    model = DummyAttentionModel()
+    sub = _make_submission(model)
+    result = _check_structural_attention(sub)
+    assert not result.passed, f"Should fail: {result.message}"
+
+
+# -- Causal behavior tests ----------------------------------------------------
+
 def test_causal_behavior_pass():
     model = SimpleAttentionModel()
     sub = _make_submission(model)
@@ -118,6 +181,8 @@ def test_causal_behavior_fail():
     result = _check_causal_behavior(sub)
     assert not result.passed
 
+
+# -- Interface bounds tests ----------------------------------------------------
 
 def test_interface_bounds_pass():
     model = SimpleAttentionModel()
@@ -139,6 +204,8 @@ def test_interface_bounds_fail_output_len():
     result = _check_interface(sub)
     assert not result.passed
 
+
+# -- Encode bounds tests -------------------------------------------------------
 
 def test_encode_bounds_pass():
     model = SimpleAttentionModel()
@@ -179,12 +246,16 @@ def test_encode_bounds_fail_range():
     assert any(not r.passed for r in results)
 
 
+# -- Encode consistency tests --------------------------------------------------
+
 def test_encode_consistency_pass():
     model = SimpleAttentionModel()
     sub = _make_submission(model)
     result = _check_encode_consistency(sub)
     assert result.passed
 
+
+# -- Decode honesty tests ------------------------------------------------------
 
 def test_decode_honesty_pass():
     def honest_decode(tokens):
@@ -197,3 +268,29 @@ def test_decode_honesty_pass():
     sub = _make_submission(model, decode_fn=honest_decode)
     result = _check_decode_honesty(sub)
     assert result.passed
+
+
+# -- Parameter influence tests -------------------------------------------------
+
+def test_parameter_influence_pass():
+    """Model whose output depends on its parameters should pass."""
+    model = SimpleAttentionModel()
+    sub = _make_submission(model)
+    result = _check_parameter_influence(sub)
+    assert result.passed, f"Should pass: {result.message}"
+
+
+def test_parameter_influence_fail_constant_model():
+    """Model that ignores all its parameters should fail."""
+    model = ConstantModel()
+    sub = _make_submission(model)
+    result = _check_parameter_influence(sub)
+    assert not result.passed, f"Should fail: {result.message}"
+
+
+def test_parameter_influence_fail_unused_param():
+    """Model with only a decorative single_param should fail."""
+    model = DummyAttentionModel()
+    sub = _make_submission(model)
+    result = _check_parameter_influence(sub)
+    assert not result.passed, f"Should fail: {result.message}"

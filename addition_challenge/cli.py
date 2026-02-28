@@ -5,7 +5,7 @@ import sys
 
 from .evaluator import evaluate
 from .loader import load_submission
-from .param_counter import count_unique_parameters
+from .param_counter import count_forward_constants, count_unique_parameters
 from .validator import validate_submission
 
 
@@ -30,7 +30,17 @@ def cmd_validate(args: argparse.Namespace) -> None:
 
     if all_passed:
         param_count = count_unique_parameters(submission.model)
-        print(f"Parameters: {param_count:,} (unique trainable)")
+        print(f"Parameters: {param_count:,} (unique registered)")
+
+        sample_input = submission.encode(12345, 67890)
+        import torch
+        fwd_stats = count_forward_constants(
+            submission.model,
+            torch.tensor([sample_input], dtype=torch.long),
+        )
+        if fwd_stats.total_elements > 0:
+            print(f"Forward constants: {fwd_stats.total_elements:,} elements ({fwd_stats.call_counts})")
+
         print("Validation: PASSED")
     else:
         print("Validation: FAILED")
@@ -103,8 +113,19 @@ def cmd_count_params(args: argparse.Namespace) -> None:
         print(f"  [FAIL] Load error: {e}")
         sys.exit(1)
 
+    import torch
+
     param_count = count_unique_parameters(submission.model)
-    print(f"Parameters: {param_count:,} (unique trainable)")
+    print(f"Parameters: {param_count:,} (unique registered)")
+
+    sample_input = submission.encode(12345, 67890)
+    fwd_stats = count_forward_constants(
+        submission.model,
+        torch.tensor([sample_input], dtype=torch.long),
+    )
+    if fwd_stats.total_elements > 0:
+        print(f"Forward constants: {fwd_stats.total_elements:,} elements ({fwd_stats.call_counts})")
+    print(f"Total cost: {param_count + fwd_stats.total_elements:,} (registered + forward constants)")
 
 
 def main() -> None:
